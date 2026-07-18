@@ -1,0 +1,22 @@
+{
+  "name": "ai-cloud-incident-platform-backend",
+  "version": "1.0.0",
+  "description": "AWS Lambda backend for the AI-Powered Cloud Incident Response Platform",
+  "type": "module",
+  "engines": {
+    "node": ">=20.x"
+  },
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "lint": "eslint lambda/ services/ utils/"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-sns": "^3.600.0",
+    "@aws-sdk/util-dynamodb": "^3.600.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0"
+  }
+}
