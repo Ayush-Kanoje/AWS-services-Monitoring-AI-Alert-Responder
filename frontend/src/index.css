@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  ::selection {
+    @apply bg-signal-teal-dark/30;
+  }
+
+  /* Visible keyboard focus for accessibility */
+  a:focus-visible,
+  button:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid theme('colors.signal.teal-dark');
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface dark:bg-surface-dark border border-border dark:border-border-dark
+      rounded-xl shadow-card dark:shadow-card-dark transition-colors duration-200;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted dark:text-muted-dark;
+  }
+
+  .data-value {
+    @apply font-mono tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
