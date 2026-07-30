@@ -27,14 +27,16 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+// Import API configuration
+import { API, handleApiResponse } from "./api/app";
+
 /* ------------------------------------------------------------------ */
 /*  Live API service layer                                            */
 /*  These functions call the real backend via API Gateway.            */
+/*  SECURITY NOTE: Instance ID is handled by backend Lambda functions */
+/*  and never exposed to the frontend for security reasons.           */
 /* ------------------------------------------------------------------ */
 
-// Replace your API URL here once you create it in AWS
-const API_BASE_URL = "https://<YOUR-API-GATEWAY-ID>.execute-api.us-east-1.amazonaws.com/prod";
-const INSTANCE_ID = "i-0123456789abcdef0"; // Your real EC2 instance ID
 
 // The dropdown just needs the list of type names — the real diagnostic
 // content (rootCause, resolution, severity, etc.) now comes from the
@@ -60,9 +62,8 @@ const SERVICE_ICONS = {
 
 // 1. Fetch Real Infrastructure Status
 async function fetchInfraStatus(signal) {
-  const response = await fetch(`${API_BASE_URL}/status`, { signal });
-  if (!response.ok) throw new Error("Failed to fetch infrastructure status");
-  const data = await response.json();
+  const response = await fetch(API.status, { signal });
+  const data = await handleApiResponse(response);
   // Guard against the backend wrapping the array in an object (e.g. { services: [...] })
   // or returning something unexpected — downstream code assumes an array.
   return Array.isArray(data) ? data : (data.services ?? []);
@@ -70,45 +71,52 @@ async function fetchInfraStatus(signal) {
 
 // 2. Trigger the Real Incident on EC2
 async function simulateIncident(type) {
-  const response = await fetch(`${API_BASE_URL}/simulate`, {
+  const response = await fetch(API.simulate, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ incidentType: type, instanceId: INSTANCE_ID }),
+    // SECURITY: instanceId is handled by backend Lambda from environment variables
+    body: JSON.stringify({ incidentType: type }),
   });
-  if (!response.ok) throw new Error("Failed to trigger incident");
-  const data = await response.json();
+  const data = await handleApiResponse(response);
   // Normalize the response so the rest of the app can rely on a Date
   // object for timestamp and sensible fallbacks for missing fields.
   return {
-    id: data.id ?? `INC-${Date.now().toString().slice(-6)}`,
-    type: data.type ?? type,
-    server: data.server ?? INSTANCE_ID,
+    id: data.incidentId || data.id || `INC-${Date.now().toString().slice(-6)}`,
+    type: data.incidentType || data.type || type,
+    server: data.instanceId || data.server || "EC2 Instance",
     timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
-    severity: data.severity ?? "Unknown",
-    metric: data.metric ?? "",
+    severity: data.severity || "Unknown",
+    metric: data.metric || "",
   };
 }
 
 // 3. Fetch Real AI Diagnosis
-async function fetchAnalysis(type) {
-  // In a real scenario, you might pass the incident ID to fetch its specific analysis
-  const response = await fetch(`${API_BASE_URL}/analysis?type=${encodeURIComponent(type)}`);
-  if (!response.ok) throw new Error("Failed to fetch AI analysis");
-  const data = await response.json();
+async function fetchAnalysis(incidentId) {
+  const response = await fetch(API.analysis, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ incidentId }),
+  });
+  const data = await handleApiResponse(response);
+  
+  // Handle nested analysis object if present
+  const analysisData = data.analysis || data;
+  
   // Normalize resolution steps: accept either plain strings or
   // { text, command } objects from the backend so CommandBlock never
   // receives an unexpected shape.
-  const resolution = Array.isArray(data.resolution)
-    ? data.resolution.map((step) =>
-        typeof step === "string" ? { text: step } : { text: step.text ?? "", command: step.command }
+  const resolution = Array.isArray(analysisData.resolution)
+    ? analysisData.resolution.map((step) =>
+        typeof step === "string" ? { text: step } : { text: step.text || step.step || "", command: step.command }
       )
     : [];
+    
   return {
-    rootCause: data.rootCause ?? "",
-    impact: data.impact ?? "",
+    rootCause: analysisData.rootCause || "",
+    impact: analysisData.impact || "",
     resolution,
-    automation: data.automation ?? "",
-    confidence: data.confidence ?? "Medium",
+    automation: analysisData.automation || "",
+    confidence: analysisData.confidence || "Medium",
   };
 }
 
@@ -779,77 +787,195 @@ function IncidentSummary({ incident, onResolve, theme }) {
 /*  Section 6 — AI Incident Analysis                                     */
 /* ------------------------------------------------------------------ */
 
-function AIIncidentAnalysis({ analysis, theme }) {
-  if (!analysis) return null;
+function AnalysisCard({ title, icon: Icon, children, theme, delay = 0 }) {
   const T = TOKENS[theme];
+  return (
+    <Reveal delay={delay}>
+      <div
+        className={`rounded-lg border p-4 transition-all duration-300 ${T.card} ${
+          theme === "dark" ? "hover:border-slate-700" : "hover:border-slate-300"
+        }`}
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <Icon className={`h-4 w-4 ${T.muted}`} />
+          <h3 className={`text-sm font-semibold uppercase tracking-wide ${T.muted}`}>{title}</h3>
+        </div>
+        {children}
+      </div>
+    </Reveal>
+  );
+}
+
+function ResolutionStepCard({ step, index, theme }) {
+  const T = TOKENS[theme];
+  return (
+    <Reveal delay={index * 50}>
+      <div
+        className={`rounded-lg border p-4 transition-all duration-300 ${T.card} ${
+          theme === "dark" ? "hover:border-slate-700" : "hover:border-slate-300"
+        }`}
+      >
+        <div className="mb-2 flex items-start gap-3">
+          <div
+            className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+              theme === "dark" ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </div>
+          <div className="flex-1">
+            <h4 className={`text-sm font-medium ${T.text}`}>Step {index + 1}</h4>
+            <p className={`mt-1 text-sm leading-relaxed ${T.subtext}`}>{step.text}</p>
+          </div>
+        </div>
+        {step.command && (
+          <div className="mt-3">
+            <p className={`mb-1.5 font-mono text-xs ${T.muted}`}>Linux/AWS Command</p>
+            <CommandBlock command={step.command} theme={theme} />
+          </div>
+        )}
+      </div>
+    </Reveal>
+  );
+}
+
+function AIIncidentAnalysis({ analysis, loading, error, incident, theme }) {
+  const T = TOKENS[theme];
+
+  // Show loading state while waiting for the API
+  if (loading) {
+    return (
+      <Reveal>
+        <section>
+          <SectionHeading eyebrow="AI-Generated Report" title="AI Incident Analysis" theme={theme} />
+          <Card theme={theme}>
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className={`mb-4 h-8 w-8 animate-spin ${T.muted}`} />
+              <p className={`text-sm ${T.subtext}`}>Analyzing incident data...</p>
+              <p className={`mt-1 font-mono text-xs ${T.muted}`}>
+                AI is processing CloudWatch metrics and generating recommendations
+              </p>
+            </div>
+          </Card>
+        </section>
+      </Reveal>
+    );
+  }
+
+  // Show error state if the API fails
+  if (error) {
+    return (
+      <Reveal>
+        <section>
+          <SectionHeading eyebrow="AI-Generated Report" title="AI Incident Analysis" theme={theme} />
+          <Card theme={theme}>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div
+                className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
+                  theme === "dark" ? "bg-red-500/10" : "bg-red-50"
+                }`}
+              >
+                <AlertTriangle className={`h-6 w-6 ${theme === "dark" ? "text-red-400" : "text-red-600"}`} />
+              </div>
+              <p className={`text-sm font-medium ${T.text}`}>Analysis Failed</p>
+              <p className={`mt-1 text-center text-xs ${T.subtext}`}>{error}</p>
+            </div>
+          </Card>
+        </section>
+      </Reveal>
+    );
+  }
+
+  // Don't render if there's no analysis data
+  if (!analysis) return null;
+
   return (
     <Reveal>
       <section>
         <SectionHeading eyebrow="AI-Generated Report" title="AI Incident Analysis" theme={theme} />
-        <Card theme={theme}>
-          <div className={`mb-5 flex items-center gap-2 border-b pb-4 ${T.divider}`}>
-            <ShieldAlert className={`h-4 w-4 ${T.muted}`} />
-            <p className={`font-mono text-xs ${T.muted}`}>Generated by backend AI analysis pipeline</p>
+
+        {/* Header Card */}
+        <Card theme={theme} className="mb-4">
+          <div className={`border-b pb-4 ${T.divider}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Bot className={`h-5 w-5 ${T.muted}`} />
+                <h2 className={`text-lg font-semibold ${T.text}`}>AI INCIDENT ANALYSIS</h2>
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-5">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <p className={`mb-1.5 text-xs font-semibold uppercase tracking-wide ${T.muted}`}>
-                Possible Root Cause
-              </p>
-              <p className={`text-sm leading-relaxed ${T.text}`}>{analysis.rootCause}</p>
+              <p className={`mb-1 text-xs ${T.muted}`}>Incident ID</p>
+              <p className={`font-mono text-sm font-medium ${T.text}`}>{incident?.id || "N/A"}</p>
             </div>
-
             <div>
-              <p className={`mb-1.5 text-xs font-semibold uppercase tracking-wide ${T.muted}`}>Impact</p>
-              <p className={`text-sm leading-relaxed ${T.text}`}>{analysis.impact}</p>
+              <p className={`mb-1 text-xs ${T.muted}`}>Status</p>
+              <StatusBadge status="resolved" theme={theme} label="Completed" />
             </div>
-
             <div>
-              <p className={`mb-3 text-xs font-semibold uppercase tracking-wide ${T.muted}`}>
-                Recommended Action Plan for the Operator
-              </p>
-              <ol className="space-y-4">
-                {analysis.resolution.map((step, i) => (
-                  <li key={step.text}>
-                    <div className={`flex gap-2 text-sm ${T.text}`}>
-                      <span className={`font-mono text-xs ${T.muted}`}>{String(i + 1).padStart(2, "0")}</span>
-                      <span>{step.text}</span>
-                    </div>
-                    {step.command && <CommandBlock command={step.command} theme={theme} />}
-                  </li>
-                ))}
-              </ol>
-              <p className={`mt-4 flex items-start gap-2 text-xs ${T.subtext}`}>
-                <MousePointerClick className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                The AI does not run these commands automatically — connect via SSH or Session
-                Manager and execute each step manually, then confirm below once resolved.
-              </p>
-            </div>
-
-            <div className={`grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-2 ${T.divider}`}>
-              <div className="flex items-start gap-2.5">
-                <Wrench className={`mt-0.5 h-4 w-4 flex-shrink-0 ${T.muted}`} />
-                <div>
-                  <p className={`mb-1 text-xs font-semibold uppercase tracking-wide ${T.muted}`}>
-                    Automation Decision
-                  </p>
-                  <p className={`text-sm ${T.text}`}>{analysis.automation}</p>
-                </div>
-              </div>
-              <div>
-                <p className={`mb-1 text-xs font-semibold uppercase tracking-wide ${T.muted}`}>Confidence</p>
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
-                    CONFIDENCE_STYLES[theme][analysis.confidence] || CONFIDENCE_STYLES[theme].Medium
-                  }`}
-                >
-                  {analysis.confidence}
-                </span>
-              </div>
+              <p className={`mb-1 text-xs ${T.muted}`}>Confidence</p>
+              <span
+                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+                  CONFIDENCE_STYLES[theme][analysis.confidence] || CONFIDENCE_STYLES[theme].Medium
+                }`}
+              >
+                {analysis.confidence}
+              </span>
             </div>
           </div>
         </Card>
+
+        {/* Root Cause Card */}
+        <div className="mb-4">
+          <AnalysisCard title="Root Cause" icon={AlertTriangle} theme={theme} delay={50}>
+            <p className={`text-sm leading-relaxed ${T.text}`}>{analysis.rootCause}</p>
+          </AnalysisCard>
+        </div>
+
+        {/* Impact Card */}
+        <div className="mb-4">
+          <AnalysisCard title="Impact" icon={ShieldAlert} theme={theme} delay={100}>
+            <p className={`text-sm leading-relaxed ${T.text}`}>{analysis.impact}</p>
+          </AnalysisCard>
+        </div>
+
+        {/* Resolution Steps */}
+        <div className="mb-4">
+          <Reveal delay={150}>
+            <h3 className={`mb-3 text-sm font-semibold uppercase tracking-wide ${T.muted}`}>
+              Resolution Steps
+            </h3>
+          </Reveal>
+          <div className="space-y-3">
+            {analysis.resolution.map((step, i) => (
+              <ResolutionStepCard key={i} step={step} index={i} theme={theme} />
+            ))}
+          </div>
+        </div>
+
+        {/* Automation Recommendation Card */}
+        <div>
+          <AnalysisCard title="Automation Recommendation" icon={Bot} theme={theme} delay={200}>
+            <p className={`text-sm leading-relaxed ${T.text}`}>{analysis.automation}</p>
+          </AnalysisCard>
+        </div>
+
+        {/* Footer Note */}
+        <Reveal delay={250}>
+          <div
+            className={`mt-4 rounded-lg border p-3 ${T.card} ${
+              theme === "dark" ? "bg-slate-900/60" : "bg-slate-50"
+            }`}
+          >
+            <p className={`flex items-start gap-2 text-xs ${T.subtext}`}>
+              <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              Commands are provided for manual execution. Connect via SSH or Session Manager and run
+              each step to resolve the incident.
+            </p>
+          </div>
+        </Reveal>
       </section>
     </Reveal>
   );
@@ -939,6 +1065,8 @@ function App() {
   const [stepIndex, setStepIndex] = useState(null);
   const [incidents, setIncidents] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
   const timers = useRef([]);
   const infraWarned = useRef(false);
 
@@ -1040,6 +1168,8 @@ function App() {
     if (running || blockedByActive) return;
     setRunning(true);
     setStepIndex(0);
+    setAnalysisLoading(false);
+    setAnalysisError(null);
     addToast("info", `Simulating "${selectedType}"...`);
 
     const advance = (idx, delay) =>
@@ -1062,16 +1192,27 @@ function App() {
       await advance(2, 700);
       await advance(3, 700);
 
-      const result = await fetchAnalysis(selectedType);
-      setIncidents((prev) =>
-        prev.map((inc) => (inc.id === newIncident.id ? { ...inc, analysis: result } : inc))
-      );
-
-      await advance(4, 400);
-      addToast("success", "AI analysis completed - review the incident report below.");
+      // Show loading state while fetching analysis
+      setAnalysisLoading(true);
+      
+      try {
+        const result = await fetchAnalysis(newIncident.id);
+        setIncidents((prev) =>
+          prev.map((inc) => (inc.id === newIncident.id ? { ...inc, analysis: result } : inc))
+        );
+        setAnalysisLoading(false);
+        
+        await advance(4, 400);
+        addToast("success", "AI analysis completed - review the incident report below.");
+      } catch (analysisErr) {
+        setAnalysisLoading(false);
+        setAnalysisError(analysisErr.message || "Failed to fetch AI analysis");
+        addToast("warning", "AI analysis failed - check the error details below.");
+      }
     } catch (err) {
       addToast("warning", err.message || "Something went wrong triggering the incident.");
       setStepIndex(null);
+      setAnalysisLoading(false);
     } finally {
       setRunning(false);
     }
@@ -1124,7 +1265,13 @@ function App() {
         </Reveal>
         <SimulationProgress stepIndex={stepIndex} theme={theme} />
         <IncidentSummary incident={current} onResolve={resolveIncident} theme={theme} />
-        <AIIncidentAnalysis analysis={current?.analysis} theme={theme} />
+        <AIIncidentAnalysis 
+          analysis={current?.analysis} 
+          loading={analysisLoading}
+          error={analysisError}
+          incident={current}
+          theme={theme} 
+        />
         <Reveal delay={320}>
           <IncidentHistory history={incidents} theme={theme} />
         </Reveal>
