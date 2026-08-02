@@ -1,7 +1,7 @@
-import IncidentDashboard from './incident-response-dashboard'
+import MonitoringDashboard from './monitoring-dashboard'
 
 function App() {
-  return <IncidentDashboard />
+  return <MonitoringDashboard />
 }
 
 export default App

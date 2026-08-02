@@ -4,11 +4,11 @@
 // VITE_API_BASE_URL=https://your-api-url.amazonaws.com/prod
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://au9j7xooxa.execute-api.ap-south-1.amazonaws.com/prod";
 
-// API endpoints for the three Lambda functions
+// API endpoints for the Lambda functions
 export const API = {
-    simulate: `${BASE_URL}/simulate`,
-    analysis: `${BASE_URL}/analysis`,
-    status: `${BASE_URL}/status`
+    status: `${BASE_URL}/status`,
+    incidents: `${BASE_URL}/incidents`,
+    analysis: `${BASE_URL}/analysis`
 };
 
 // Helper function to handle API responses

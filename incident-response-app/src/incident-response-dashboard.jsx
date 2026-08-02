@@ -1,3 +1,19 @@
+/* ============================================================================
+ * DEPRECATED FILE - DO NOT USE
+ * ============================================================================
+ * This file contains the old incident simulation interface.
+ * It has been replaced by: monitoring-dashboard.jsx
+ * 
+ * The new dashboard is a monitoring-only interface that:
+ * - Does NOT trigger incidents (no simulation buttons)
+ * - Polls for real incidents from the backend
+ * - Displays multiple incidents in expandable cards
+ * - Shows infrastructure health in real-time
+ * 
+ * This file is kept for reference only and should not be imported.
+ * ============================================================================
+ */
+
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Activity,
@@ -27,6 +43,9 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+// NOTE: This file is deprecated. Use monitoring-dashboard.jsx instead.
+// This old incident simulation interface has been replaced with a real-time monitoring dashboard.
+
 // Import API configuration
 import { API, handleApiResponse } from "./api/app";
 
@@ -38,9 +57,7 @@ import { API, handleApiResponse } from "./api/app";
 /* ------------------------------------------------------------------ */
 
 
-// The dropdown just needs the list of type names — the real diagnostic
-// content (rootCause, resolution, severity, etc.) now comes from the
-// backend via fetchAnalysis / simulateIncident, not from local mock data.
+// DEPRECATED: The dropdown is no longer used in the new monitoring dashboard
 const INCIDENT_TYPES = [
   "CPU Spike",
   "Disk Full",
@@ -69,28 +86,25 @@ async function fetchInfraStatus(signal) {
   return Array.isArray(data) ? data : (data.services ?? []);
 }
 
-// 2. Trigger the Real Incident on EC2
-async function simulateIncident(type) {
-  const response = await fetch(API.simulate, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // SECURITY: instanceId is handled by backend Lambda from environment variables
-    body: JSON.stringify({ incidentType: type }),
-  });
-  const data = await handleApiResponse(response);
-  // Normalize the response so the rest of the app can rely on a Date
-  // object for timestamp and sensible fallbacks for missing fields.
-  return {
-    id: data.incidentId || data.id || `INC-${Date.now().toString().slice(-6)}`,
-    type: data.incidentType || data.type || type,
-    server: data.instanceId || data.server || "EC2 Instance",
-    timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
-    severity: data.severity || "Unknown",
-    metric: data.metric || "",
-  };
-}
+// DEPRECATED: simulateIncident is no longer used - the new dashboard monitors real incidents
+// async function simulateIncident(type) {
+//   const response = await fetch(API.simulate, {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({ incidentType: type }),
+//   });
+//   const data = await handleApiResponse(response);
+//   return {
+//     id: data.incidentId || data.id || `INC-${Date.now().toString().slice(-6)}`,
+//     type: data.incidentType || data.type || type,
+//     server: data.instanceId || data.server || "EC2 Instance",
+//     timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
+//     severity: data.severity || "Unknown",
+//     metric: data.metric || "",
+//   };
+// }
 
-// 3. Fetch Real AI Diagnosis
+// 3. Fetch Real AI Diagnosis (Still used for fetching analysis)
 async function fetchAnalysis(incidentId) {
   const response = await fetch(API.analysis, {
     method: "POST",
@@ -117,6 +131,7 @@ async function fetchAnalysis(incidentId) {
     resolution,
     automation: analysisData.automation || "",
     confidence: analysisData.confidence || "Medium",
+    logs: analysisData.logs || "",
   };
 }
 
@@ -431,105 +446,18 @@ function Header({ theme, onToggleTheme }) {
 
 /* ------------------------------------------------------------------ */
 /*  Section 1 — Hero / Introduction                                    */
+/*  DEPRECATED: Replaced with simpler dashboard header                 */
 /* ------------------------------------------------------------------ */
 
-function HeroSection({ theme }) {
-  const T = TOKENS[theme];
-  return (
-    <div className={`border-b transition-colors duration-300 ${T.card} ${T.divider}`}>
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
-        <div className={`mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 font-mono text-xs ${T.chip}`}>
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-          </span>
-          incident-response-platform - production
-        </div>
-        <h1 className={`text-2xl font-semibold tracking-tight sm:text-3xl ${T.text}`}>
-          AI-Powered Cloud Incident Response Platform
-        </h1>
-        <p className={`mt-3 max-w-2xl text-sm leading-relaxed ${T.subtext}`}>
-          This project demonstrates an AI-assisted Cloud Incident Response
-          workflow. The dashboard monitors real AWS infrastructure in real
-          time. When an incident is generated, it is processed through a real
-          backend pipeline where AI analyzes the event, identifies the most
-          likely root cause, recommends remediation steps, stores the
-          incident, and supports automated incident response.
-        </p>
-      </div>
-    </div>
-  );
-}
+// function HeroSection({ theme }) { ... }
 
 /* ------------------------------------------------------------------ */
 /*  Guided Incident Workflow (signature 4-step diagram)                 */
+/*  DEPRECATED: No longer needed in monitoring-only dashboard           */
 /* ------------------------------------------------------------------ */
 
-const WORKFLOW_STEPS = [
-  {
-    label: "Step 1: User",
-    title: "Clicks \"Simulate Incident\"",
-    detail: "You trigger a scenario (e.g. High CPU) from the dashboard.",
-    icon: MousePointerClick,
-  },
-  {
-    label: "Step 2: System",
-    title: "EC2 experiences fault",
-    detail: "Backend runs a controlled fault on the real EC2 instance.",
-    icon: Server,
-  },
-  {
-    label: "Step 3: AI",
-    title: "Diagnoses root cause",
-    detail: "AI reads CloudWatch metrics and outputs CLI remediation steps.",
-    icon: Bot,
-  },
-  {
-    label: "Step 4: User",
-    title: "Follows guide & fixes",
-    detail: "You run the commands yourself and resolve the issue manually.",
-    icon: Wrench,
-  },
-];
-
-function GuidedWorkflow({ theme }) {
-  const T = TOKENS[theme];
-  return (
-    <section>
-      <SectionHeading eyebrow="How It Works" title="The Guided Incident Workflow" theme={theme} />
-      <Card theme={theme}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-2">
-          {WORKFLOW_STEPS.flatMap((step, i) => {
-            const box = (
-              <div
-                key={`box-${step.label}`}
-                className={`flex flex-1 flex-col gap-1.5 rounded-lg border px-3.5 py-3 transition-all duration-200 hover:-translate-y-0.5 ${T.divider} ${
-                  theme === "dark" ? "bg-slate-800/50" : "bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <step.icon className={`h-4 w-4 flex-shrink-0 ${T.muted}`} />
-                  <span className={`font-mono text-[10px] uppercase tracking-wider ${T.muted}`}>
-                    {step.label}
-                  </span>
-                </div>
-                <p className={`text-sm font-medium ${T.text}`}>{step.title}</p>
-                <p className={`text-xs leading-relaxed ${T.subtext}`}>{step.detail}</p>
-              </div>
-            );
-            if (i === WORKFLOW_STEPS.length - 1) return [box];
-            return [
-              box,
-              <div key={`arrow-${step.label}`} className="flex items-center justify-center">
-                <ArrowRight className={`h-4 w-4 flex-shrink-0 rotate-90 lg:rotate-0 ${T.muted}`} />
-              </div>,
-            ];
-          })}
-        </div>
-      </Card>
-    </section>
-  );
-}
+// const WORKFLOW_STEPS = [ ... ];
+// function GuidedWorkflow({ theme }) { ... }
 
 /* ------------------------------------------------------------------ */
 /*  Section 2 — Infrastructure Health                                   */
@@ -565,163 +493,96 @@ function InfrastructureHealth({ services, loading, theme }) {
 
 /* ------------------------------------------------------------------ */
 /*  Section 3 — Incident Simulation                                     */
+/*  DEPRECATED: No longer used in monitoring dashboard                  */
 /* ------------------------------------------------------------------ */
 
-function IncidentSimulation({ selected, onSelect, onSimulate, disabled, blockedByActive, theme }) {
-  const T = TOKENS[theme];
-  return (
-    <section>
-      <SectionHeading eyebrow="Manual Trigger" title="Incident Simulation" theme={theme} />
-      <Card theme={theme}>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <select
-            aria-label="Incident type"
-            value={selected}
-            onChange={(e) => onSelect(e.target.value)}
-            disabled={disabled}
-            className={`flex-1 rounded-lg border px-3 py-2.5 text-sm transition-colors duration-200 focus:outline-none focus:ring-2 disabled:opacity-50 ${T.inputBg}`}
-          >
-            {INCIDENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={onSimulate}
-            disabled={disabled}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${T.btnPrimary} ${T.focusRing}`}
-          >
-            {disabled && !blockedByActive ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Zap className="h-4 w-4" />
-            )}
-            Simulate Incident
-          </button>
-        </div>
-        {blockedByActive && (
-          <p className={`mt-2.5 text-xs ${T.subtext}`}>
-            Resolve the current incident before simulating a new one.
-          </p>
-        )}
-      </Card>
-
-      <Card theme={theme} className={`mt-3 ${theme === "dark" ? "bg-slate-900/60" : "bg-slate-50"}`}>
-        <p className={`mb-2 text-xs font-medium uppercase tracking-wide ${T.subtext}`}>
-          How Simulation Works
-        </p>
-        <ul className={`space-y-1.5 text-sm ${T.subtext}`}>
-          <li>- Only the incident generation is simulated.</li>
-          <li>- The simulated incident is sent to the real backend.</li>
-          <li>- AWS services process the incident.</li>
-          <li>- AI analyzes the incident.</li>
-          <li>- Results appear below.</li>
-        </ul>
-      </Card>
-    </section>
-  );
-}
+// function IncidentSimulation({ selected, onSelect, onSimulate, disabled, blockedByActive, theme }) {
+//   const T = TOKENS[theme];
+//   return (
+//     <section>
+//       <SectionHeading eyebrow="Manual Trigger" title="Incident Simulation" theme={theme} />
+//       <Card theme={theme}>
+//         <div className="flex flex-col gap-3 sm:flex-row">
+//           <select
+//             aria-label="Incident type"
+//             value={selected}
+//             onChange={(e) => onSelect(e.target.value)}
+//             disabled={disabled}
+//             className={`flex-1 rounded-lg border px-3 py-2.5 text-sm transition-colors duration-200 focus:outline-none focus:ring-2 disabled:opacity-50 ${T.inputBg}`}
+//           >
+//             {INCIDENT_TYPES.map((t) => (
+//               <option key={t} value={t}>
+//                 {t}
+//               </option>
+//             ))}
+//           </select>
+//           <button
+//             type="button"
+//             onClick={onSimulate}
+//             disabled={disabled}
+//             className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${T.btnPrimary} ${T.focusRing}`}
+//           >
+//             {disabled && !blockedByActive ? (
+//               <Loader2 className="h-4 w-4 animate-spin" />
+//             ) : (
+//               <Zap className="h-4 w-4" />
+//             )}
+//             Simulate Incident
+//           </button>
+//         </div>
+//         {blockedByActive && (
+//           <p className={`mt-2.5 text-xs ${T.subtext}`}>
+//             Resolve the current incident before simulating a new one.
+//           </p>
+//         )}
+//       </Card>
+//
+//       <Card theme={theme} className={`mt-3 ${theme === "dark" ? "bg-slate-900/60" : "bg-slate-50"}`}>
+//         <p className={`mb-2 text-xs font-medium uppercase tracking-wide ${T.subtext}`}>
+//           How Simulation Works
+//         </p>
+//         <ul className={`space-y-1.5 text-sm ${T.subtext}`}>
+//           <li>- Only the incident generation is simulated.</li>
+//           <li>- The simulated incident is sent to the real backend.</li>
+//           <li>- AWS services process the incident.</li>
+//           <li>- AI analyzes the incident.</li>
+//           <li>- Results appear below.</li>
+//         </ul>
+//       </Card>
+//     </section>
+//   );
+// }
 
 /* ------------------------------------------------------------------ */
 /*  Section 4 — Simulation Progress + pipeline (signature element)      */
+/*  DEPRECATED: No longer used in monitoring dashboard                  */
 /* ------------------------------------------------------------------ */
 
-const PROGRESS_STEPS = [
-  { key: "generated", label: "Incident Generated" },
-  { key: "sent", label: "Sending request to backend" },
-  { key: "processing", label: "Processing incident" },
-  { key: "ai", label: "Waiting for AI response" },
-  { key: "done", label: "Incident Analysis Completed" },
-];
+// DEPRECATED: Progress steps and pipeline stages are no longer used
+// const PROGRESS_STEPS = [
+//   { key: "generated", label: "Incident Generated" },
+//   { key: "sent", label: "Sending request to backend" },
+//   { key: "processing", label: "Processing incident" },
+//   { key: "ai", label: "Waiting for AI response" },
+//   { key: "done", label: "Incident Analysis Completed" },
+// ];
 
-const PIPELINE_STAGES = [
-  { key: "gateway", label: "API Gateway", icon: Network },
-  { key: "lambda", label: "Lambda", icon: Server },
-  { key: "cloudwatch", label: "CloudWatch", icon: Radio },
-  { key: "ai", label: "OpenRouter", icon: Bot },
-  { key: "db", label: "DynamoDB", icon: Database },
-  { key: "sns", label: "SNS", icon: Send },
-];
+// const PIPELINE_STAGES = [
+//   { key: "gateway", label: "API Gateway", icon: Network },
+//   { key: "lambda", label: "Lambda", icon: Server },
+//   { key: "cloudwatch", label: "CloudWatch", icon: Radio },
+//   { key: "ai", label: "OpenRouter", icon: Bot },
+//   { key: "db", label: "DynamoDB", icon: Database },
+//   { key: "sns", label: "SNS", icon: Send },
+// ];
 
-const STAGE_FOR_STEP = [-1, 0, 1, 3, 5];
+// const STAGE_FOR_STEP = [-1, 0, 1, 3, 5];
 
-function PipelineFlow({ activeStage, theme }) {
-  return (
-    <div className="flex items-center overflow-x-auto py-1">
-      {PIPELINE_STAGES.map((stage, i) => {
-        const state =
-          activeStage < 0 ? "idle" : i < activeStage ? "done" : i === activeStage ? "active" : "idle";
-        const activeCls =
-          theme === "dark" ? "bg-slate-100 text-slate-900" : "bg-slate-900 text-white";
-        const doneCls =
-          theme === "dark" ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700";
-        const idleCls = theme === "dark" ? "bg-slate-800 text-slate-500" : "bg-slate-50 text-slate-400";
-        return (
-          <div key={stage.key} className="flex items-center">
-            <div
-              className={`flex flex-col items-center gap-1.5 rounded-lg px-3 py-2 transition-all duration-300 ${
-                state === "active" ? activeCls : state === "done" ? doneCls : idleCls
-              }`}
-            >
-              <stage.icon className={`h-4 w-4 ${state === "active" ? "animate-pulse" : ""}`} />
-              <span className="whitespace-nowrap font-mono text-[10px]">{stage.label}</span>
-            </div>
-            {i < PIPELINE_STAGES.length - 1 && (
-              <ChevronRight
-                className={`mx-1 h-4 w-4 flex-shrink-0 transition-colors duration-300 ${
-                  i < activeStage ? "text-emerald-400" : theme === "dark" ? "text-slate-700" : "text-slate-200"
-                }`}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// DEPRECATED: PipelineFlow component is no longer used
+// function PipelineFlow({ activeStage, theme }) { ... }
 
-function SimulationProgress({ stepIndex, theme }) {
-  if (stepIndex === null) return null;
-  const T = TOKENS[theme];
-  const activeStage = STAGE_FOR_STEP[Math.min(stepIndex, 3)] ?? -1;
-  const pipelineStage = stepIndex >= 4 ? PIPELINE_STAGES.length : activeStage;
-
-  return (
-    <Reveal>
-      <section>
-        <SectionHeading eyebrow="Real Backend Pipeline" title="Simulation Progress" theme={theme} />
-        <Card theme={theme}>
-          <div className="mb-5 space-y-2.5">
-            {PROGRESS_STEPS.map((step, i) => {
-              const done = i < stepIndex;
-              const active = i === stepIndex;
-              return (
-                <div key={step.key} className="flex items-center gap-2.5 text-sm transition-colors duration-300">
-                  {done ? (
-                    <CheckCircle2 className={`h-4 w-4 flex-shrink-0 ${T.stepDone}`} />
-                  ) : active ? (
-                    <Loader2 className={`h-4 w-4 flex-shrink-0 animate-spin ${T.subtext}`} />
-                  ) : (
-                    <span className={`h-4 w-4 flex-shrink-0 rounded-full border ${T.stepPending}`} />
-                  )}
-                  <span className={done || active ? T.stepText : T.stepTextIdle}>{step.label}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className={`border-t pt-4 ${T.divider}`}>
-            <p className={`mb-2 font-mono text-[11px] uppercase tracking-wider ${T.muted}`}>
-              Backend request path
-            </p>
-            <PipelineFlow activeStage={pipelineStage} theme={theme} />
-          </div>
-        </Card>
-      </section>
-    </Reveal>
-  );
-}
+// DEPRECATED: SimulationProgress component is no longer used  
+// function SimulationProgress({ stepIndex, theme }) { ... }
 
 /* ------------------------------------------------------------------ */
 /*  Section 5 — Incident Summary                                        */
@@ -941,6 +802,21 @@ function AIIncidentAnalysis({ analysis, loading, error, incident, theme }) {
           </AnalysisCard>
         </div>
 
+        {/* Logs Context Card */}
+        {analysis.logs && (
+          <div className="mb-4">
+            <AnalysisCard title="CloudWatch Logs Context" icon={Terminal} theme={theme} delay={125}>
+              <div
+                className={`mt-2 rounded-lg p-3 font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre ${
+                  theme === "dark" ? "bg-black/40 text-slate-300" : "bg-slate-900 text-slate-300"
+                }`}
+              >
+                {analysis.logs}
+              </div>
+            </AnalysisCard>
+          </div>
+        )}
+
         {/* Resolution Steps */}
         <div className="mb-4">
           <Reveal delay={150}>
@@ -1051,245 +927,36 @@ function Footer({ theme }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  App                                                                 */
+/*  App - DEPRECATED                                                    */
+/*  This entire component is replaced by MonitoringDashboard            */
 /* ------------------------------------------------------------------ */
 
-let toastCounter = 0;
+// let toastCounter = 0;
 
+// DEPRECATED: This entire App component is no longer used
+// The new monitoring dashboard is in monitoring-dashboard.jsx
+/*
 function App() {
-  const [theme, setTheme] = useState("light");
-  const [services, setServices] = useState([]);
-  const [loadingInfra, setLoadingInfra] = useState(true);
-  const [selectedType, setSelectedType] = useState(INCIDENT_TYPES[0]);
-  const [running, setRunning] = useState(false);
-  const [stepIndex, setStepIndex] = useState(null);
-  const [incidents, setIncidents] = useState([]);
-  const [toasts, setToasts] = useState([]);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisError, setAnalysisError] = useState(null);
-  const timers = useRef([]);
-  const infraWarned = useRef(false);
-
-  const addToast = useCallback((type, message) => {
-    toastCounter += 1;
-    const id = `t-${Date.now()}-${toastCounter}`;
-    setToasts((prev) => [...prev, { id, type, message }]);
-  }, []);
-
-  const dismissToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  // Load persisted theme
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await window.storage.get("theme");
-        if (res && (res.value === "dark" || res.value === "light")) {
-          setTheme(res.value);
-        }
-      } catch (e) {
-        // no theme stored yet - keep default "light"
-      }
-    })();
-  }, []);
-
-  const toggleTheme = useCallback(async () => {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      window.storage.set("theme", next).catch(() => {});
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Tracks whether the previous poll failed, so toasts only fire on
-    // healthy→failing and failing→recovered transitions, not on every
-    // single 5-second poll while the backend stays down.
-    let wasFailing = false;
-    let currentController = null;
-
-    const checkHealth = (isInitial) => {
-      // Abort any in-flight request before starting a new one
-      if (currentController) currentController.abort();
-      currentController = new AbortController();
-      const { signal } = currentController;
-
-      fetchInfraStatus(signal)
-        .then((data) => {
-          if (cancelled) return;
-          setServices(data);
-          if (wasFailing) {
-            wasFailing = false;
-            addToast("success", "Infrastructure status connection restored.");
-          }
-          if (isInitial) {
-            setLoadingInfra(false);
-            if (!infraWarned.current) {
-              const degraded = data.find((s) => s.status !== "healthy");
-              if (degraded) {
-                infraWarned.current = true;
-                addToast("warning", `${degraded.name} reporting ${degraded.status} status.`);
-              }
-            }
-          }
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          // Ignore AbortError — these are intentional cancellations, not failures
-          if (err.name === "AbortError") return;
-          if (isInitial) setLoadingInfra(false);
-          if (!wasFailing) {
-            wasFailing = true;
-            addToast("warning", err.message || "Failed to fetch infrastructure status.");
-          }
-        });
-    };
-
-    // Check health immediately, then poll every 5 seconds so the dashboard
-    // recovers automatically once you fix the issue.
-    checkHealth(true);
-    const intervalId = setInterval(() => checkHealth(false), 5000);
-
-    return () => {
-      cancelled = true;
-      if (currentController) currentController.abort();
-      clearInterval(intervalId);
-      timers.current.forEach(clearTimeout);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const current = incidents[0] || null;
-  const blockedByActive = !!current && current.status === "processing" && !running;
-
-  const runSimulation = useCallback(async () => {
-    if (running || blockedByActive) return;
-    setRunning(true);
-    setStepIndex(0);
-    setAnalysisLoading(false);
-    setAnalysisError(null);
-    addToast("info", `Simulating "${selectedType}"...`);
-
-    const advance = (idx, delay) =>
-      new Promise((resolve) => {
-        const t = setTimeout(() => {
-          setStepIndex(idx);
-          resolve();
-        }, delay);
-        timers.current.push(t);
-      });
-
-    try {
-      // Show "sending request to backend" before the request actually goes
-      // out, so the progress UI tracks the real network call instead of
-      // lagging a fixed delay behind it.
-      setStepIndex(1);
-      const newIncident = await simulateIncident(selectedType);
-      setIncidents((prev) => [{ ...newIncident, status: "processing", analysis: null }, ...prev].slice(0, 8));
-
-      await advance(2, 700);
-      await advance(3, 700);
-
-      // Show loading state while fetching analysis
-      setAnalysisLoading(true);
-      
-      try {
-        const result = await fetchAnalysis(newIncident.id);
-        setIncidents((prev) =>
-          prev.map((inc) => (inc.id === newIncident.id ? { ...inc, analysis: result } : inc))
-        );
-        setAnalysisLoading(false);
-        
-        await advance(4, 400);
-        addToast("success", "AI analysis completed - review the incident report below.");
-      } catch (analysisErr) {
-        setAnalysisLoading(false);
-        setAnalysisError(analysisErr.message || "Failed to fetch AI analysis");
-        addToast("warning", "AI analysis failed - check the error details below.");
-      }
-    } catch (err) {
-      addToast("warning", err.message || "Something went wrong triggering the incident.");
-      setStepIndex(null);
-      setAnalysisLoading(false);
-    } finally {
-      setRunning(false);
-    }
-  }, [running, blockedByActive, selectedType, addToast]);
-
-  const resolveIncident = useCallback(
-    (id) => {
-      setIncidents((prev) =>
-        prev.map((inc) => (inc.id === id ? { ...inc, status: "resolved", resolvedAt: new Date() } : inc))
-      );
-      addToast("success", "Incident marked as resolved.");
-    },
-    [addToast]
-  );
-
-  const T = TOKENS[theme];
-
-  return (
-    <div className={`min-h-screen font-sans transition-colors duration-300 ${T.page}`}>
-      <style>{`
-        @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: 0.01ms !important;
-            scroll-behavior: auto !important;
-          }
-        }
-      `}</style>
-      <Header theme={theme} onToggleTheme={toggleTheme} />
-      <Reveal>
-        <HeroSection theme={theme} />
-      </Reveal>
-      <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:space-y-10 sm:px-6 sm:py-10">
-        <Reveal delay={80}>
-          <GuidedWorkflow theme={theme} />
-        </Reveal>
-        <Reveal delay={160}>
-          <InfrastructureHealth services={services} loading={loadingInfra} theme={theme} />
-        </Reveal>
-        <Reveal delay={240}>
-          <IncidentSimulation
-            selected={selectedType}
-            onSelect={setSelectedType}
-            onSimulate={runSimulation}
-            disabled={running || blockedByActive}
-            blockedByActive={blockedByActive}
-            theme={theme}
-          />
-        </Reveal>
-        <SimulationProgress stepIndex={stepIndex} theme={theme} />
-        <IncidentSummary incident={current} onResolve={resolveIncident} theme={theme} />
-        <AIIncidentAnalysis 
-          analysis={current?.analysis} 
-          loading={analysisLoading}
-          error={analysisError}
-          incident={current}
-          theme={theme} 
-        />
-        <Reveal delay={320}>
-          <IncidentHistory history={incidents} theme={theme} />
-        </Reveal>
-      </main>
-      <Footer theme={theme} />
-      <ToastStack toasts={toasts} onDismiss={dismissToast} theme={theme} />
-    </div>
-  );
+  // All the old simulation logic has been removed
+  // See monitoring-dashboard.jsx for the new implementation
+  return null;
 }
+*/
 
-export default App;
+// DEPRECATED: Old App export - use MonitoringDashboard instead
+// export default App;
 
-if (typeof window !== 'undefined') {
-  // Browser environment - ensure window.storage exists for theme persistence
-  if (!window.storage) {
-    window.storage = {
-      get: (key) => Promise.resolve({ value: localStorage.getItem(key) }),
-      set: (key, value) => Promise.resolve(localStorage.setItem(key, value))
-    };
-  }
-}
+// DEPRECATED: Storage shim is no longer needed here
+// if (typeof window !== 'undefined') {
+//   if (!window.storage) {
+//     window.storage = {
+//       get: (key) => Promise.resolve({ value: localStorage.getItem(key) }),
+//       set: (key, value) => Promise.resolve(localStorage.setItem(key, value))
+//     };
+//   }
+// }
+
+// ============================================================================
+// THIS FILE IS DEPRECATED
+// Use monitoring-dashboard.jsx instead for the new monitoring-only interface
+// ============================================================================
