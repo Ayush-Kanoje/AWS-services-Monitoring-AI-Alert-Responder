@@ -2,7 +2,7 @@
 // Example format: https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod
 // You can also use environment variables (create .env file):
 // VITE_API_BASE_URL=https://your-api-url.amazonaws.com/prod
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://au9j7xooxa.execute-api.ap-south-1.amazonaws.com/prod";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://lnnlsbd9p0.execute-api.ap-south-1.amazonaws.com/prod";
 
 // API endpoints for the Lambda functions
 export const API = {
