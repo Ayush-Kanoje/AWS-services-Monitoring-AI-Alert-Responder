@@ -27,26 +27,77 @@ Cloud-LogLens focuses on correlating the right logs, metrics, and incident conte
 
 ### How It Works
 
-1. An incident is created in DynamoDB through the API.
-2. Lambda collects the relevant CloudWatch metrics and logs for that incident.
-3. Structured evidence is sent to OpenRouter for analysis.
-4. The model returns JSON with `rootCause`, `impact`, `confidence`, and `resolution`.
-5. Results are saved back to DynamoDB and an SNS email is sent.
-6. The React dashboard reads the API response and renders the incident details.
+1. The user opens the dashboard through CloudFront.
+2. CloudFront serves the React build from S3.
+3. The dashboard calls the API Gateway REST endpoints for status and incidents.
+4. When an incident needs analysis, the incident ID is sent to the Lambda analysis route.
+5. Lambda collects the matching CloudWatch metrics and logs for that incident.
+6. Structured evidence is sent to OpenRouter for analysis.
+7. The model returns JSON with `rootCause`, `impact`, `confidence`, and `resolution`.
+8. Results are saved back to DynamoDB and an SNS email is sent.
+9. The dashboard refreshes and renders the incident details.
 
 ### System Flow
 
 ```mermaid
-flowchart LR
-    U[Users] --> CF[CloudFront]
-    CF --> S3[S3 Static Site]
-    U --> API[API Gateway REST\n(/status GET, /analyze POST)]
-    API --> L[Lambda]
-    L --> D[DynamoDB\nincidents]
-    L --> CW[CloudWatch]
-    L --> OR[OpenRouter]
-    L --> SNS[SNS Email]
-    EC2[EC2 + CloudWatch Agent] --> CW
+flowchart TB
+    U[User Browser] --> CF[CloudFront]
+    CF --> S3[S3 Static Site\nReact App]
+    U --> API[API Gateway REST]
+    API --> L1[Lambda: Status]
+    API --> L2[Lambda: Analysis]
+    L1 --> EC2[EC2 Instance]
+    L1 --> CW[CloudWatch]
+    L2 --> D[DynamoDB\nincidents]
+    L2 --> CW
+    L2 --> OR[OpenRouter]
+    L2 --> SNS[SNS Email]
+    EC2 --> CW
+```
+
+## Complete Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Browser as React Dashboard
+    participant CDN as CloudFront
+    participant Bucket as S3
+    participant API as API Gateway REST
+    participant Status as Status Lambda
+    participant Analysis as Analysis Lambda
+    participant DB as DynamoDB
+    participant Logs as CloudWatch
+    participant LLM as OpenRouter
+    participant Notify as SNS
+
+    User->>Browser: Open dashboard
+    Browser->>CDN: Request app bundle
+    CDN->>Bucket: Fetch static assets
+    Bucket-->>CDN: React build
+    CDN-->>Browser: Serve UI
+    Browser->>API: GET status
+    API->>Status: Invoke status check
+    Status-->>API: Service health JSON
+    API-->>Browser: Render service cards
+    Browser->>API: GET incidents
+    API->>Analysis: Read stored incidents
+    Analysis->>DB: Load incident history
+    DB-->>Analysis: Incident records
+    Analysis-->>API: Incident list
+    API-->>Browser: Render incidents
+    User->>Browser: Select incident for analysis
+    Browser->>API: POST analysis request with incidentId
+    API->>Analysis: Invoke analysis Lambda
+    Analysis->>Logs: Pull relevant evidence
+    Analysis->>LLM: Send structured context
+    LLM-->>Analysis: JSON diagnosis
+    Analysis->>DB: Save analysis result
+    Analysis->>Notify: Publish alert
+    Notify-->>User: Email notification
+    Analysis-->>API: Analysis response
+    API-->>Browser: Display root cause and resolution
 ```
 
 ## Build Evolution
@@ -73,7 +124,8 @@ The frontend and deployment path evolved through a few attempts before landing o
 
 | Endpoint | Method | Body | Response |
 | --- | --- | --- | --- |
-| `/analyze` | POST | `{ "incidentId": "..." }` | Structured analysis result |
+| `/analysis` | POST | `{ "incidentId": "..." }` | Structured analysis result |
+| `/incidents` | GET | None | Incident history |
 | `/status` | GET | None | Instance and service health |
 
 ## Evidence Sources
