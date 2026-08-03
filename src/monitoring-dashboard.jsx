@@ -38,6 +38,43 @@ async function fetchInfraStatus(signal) {
   return Array.isArray(data) ? data : (data.services ?? []);
 }
 
+function normalizeInfraServices(services) {
+  const ec2 = services.find((service) => service.id === "ec2");
+  const cloudwatch = services.find((service) => service.id === "cw");
+
+  const dependencyStatus = [ec2?.status, cloudwatch?.status].reduce((worst, current) => {
+    if (current === "critical") return "critical";
+    if (current === "warning" && worst !== "critical") return "warning";
+    return worst;
+  }, "healthy");
+
+  const dependencyDetail = [
+    ec2 ? `EC2: ${ec2.detail || ec2.status}` : null,
+    cloudwatch ? `CloudWatch: ${cloudwatch.detail || cloudwatch.status}` : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  return services.map((service) => {
+    const needsDerivedStatus = (service.id === "app" || service.id === "nginx") && /not yet wired to a real check/i.test(service.detail || "");
+
+    if (!needsDerivedStatus) {
+      return service;
+    }
+
+    const shouldWarn = dependencyStatus === "warning";
+    const shouldCrit = dependencyStatus === "critical";
+
+    return {
+      ...service,
+      status: shouldCrit ? "critical" : shouldWarn ? "warning" : ec2?.status || service.status || "healthy",
+      detail: dependencyDetail
+        ? `Derived from live infrastructure checks (${dependencyDetail})`
+        : "Derived from live infrastructure checks",
+    };
+  });
+}
+
 // Fetch all incidents from backend
 async function fetchIncidents(signal) {
   const response = await fetch(API.incidents, { signal });
@@ -607,7 +644,7 @@ function MonitoringDashboard() {
       fetchInfraStatus(signal)
         .then((data) => {
           if (cancelled) return;
-          setServices(data);
+          setServices(normalizeInfraServices(data));
           if (wasFailing) {
             wasFailing = false;
             addToast("success", "Infrastructure status connection restored.");
